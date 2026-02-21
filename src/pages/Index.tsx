@@ -4,6 +4,7 @@ import { generateAnalysis, AnalysisResult, RiskLevel } from '@/services/analysis
 import InputPanel from '@/components/InputPanel';
 import StrategyPanel from '@/components/StrategyPanel';
 import MarketOverview from '@/components/MarketOverview';
+import PerformanceTable from '@/components/PerformanceTable';
 import { Activity, Radio } from 'lucide-react';
 
 export default function Index() {
@@ -62,6 +63,9 @@ export default function Index() {
 
         {/* Bottom: Market Overview */}
         <MarketOverview assets={assets} isLoading={isLoadingData} />
+
+        {/* Performance Table */}
+        {!isLoadingData && <PerformanceTable assets={assets} />}
       </main>
 
       {/* Footer */}

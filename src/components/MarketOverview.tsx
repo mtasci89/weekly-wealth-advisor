@@ -1,5 +1,6 @@
-import { Asset } from '@/services/marketData';
+import { Asset, AssetCategory, CATEGORY_LABELS, getAllCategories, getAssetsByCategory } from '@/services/marketData';
 import AssetCard from './AssetCard';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { BarChart3 } from 'lucide-react';
 
 interface MarketOverviewProps {
@@ -29,30 +30,41 @@ export default function MarketOverview({ assets, isLoading }: MarketOverviewProp
     );
   }
 
-  const stocks = assets.filter(a => a.type === 'stock');
-  const etfs = assets.filter(a => a.type === 'etf');
+  const categories = getAllCategories();
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-muted-foreground font-mono text-sm font-semibold tracking-wider uppercase">
         <BarChart3 className="w-4 h-4" />
-        Hisse Senetleri
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {stocks.map(asset => (
-          <AssetCard key={asset.symbol} asset={asset} />
-        ))}
+        Varlık Sınıfları
       </div>
 
-      <div className="flex items-center gap-2 text-muted-foreground font-mono text-sm font-semibold tracking-wider uppercase mt-6">
-        <BarChart3 className="w-4 h-4" />
-        ETF'ler
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {etfs.map(asset => (
-          <AssetCard key={asset.symbol} asset={asset} />
-        ))}
-      </div>
+      <Tabs defaultValue={categories[0]} className="w-full">
+        <TabsList className="bg-secondary/50 border border-border flex-wrap h-auto gap-1 p-1.5">
+          {categories.map(cat => (
+            <TabsTrigger
+              key={cat}
+              value={cat}
+              className="font-mono text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-3 py-1.5"
+            >
+              {CATEGORY_LABELS[cat]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {categories.map(cat => {
+          const catAssets = getAssetsByCategory(assets, cat);
+          return (
+            <TabsContent key={cat} value={cat}>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
+                {catAssets.map(asset => (
+                  <AssetCard key={asset.symbol} asset={asset} />
+                ))}
+              </div>
+            </TabsContent>
+          );
+        })}
+      </Tabs>
     </div>
   );
 }
