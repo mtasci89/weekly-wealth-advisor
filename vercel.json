@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/proxy/tefas/:match*",
-      "destination": "https://www.tefas.gov.tr/:match*"
+      "destination": "https://www.tefas.gov.tr/api/data/:match*"
     },
     {
       "source": "/(.*)",
