@@ -745,7 +745,15 @@ export async function fetchAllRealData(): Promise<Asset[]> {
 export async function fetchDailyPrices(yahooSymbol: string, days = 30): Promise<number[]> {
   try {
     const url = `${RAPIDAPI_BASE}/markets/stock/history?symbol=${encodeURIComponent(yahooSymbol)}&interval=1d&diffandsplits=false`;
-    const res = await fetch(url, { headers: yahooHeaders() });
+    // Her tekil fiyat isteği için 8 saniyelik timeout — takılı kalmasın
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: yahooHeaders(), signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) return [];
     const json = await res.json();
     const items = json?.body ?? {};
@@ -788,7 +796,14 @@ export async function fetchTechnicalSignals(assets: Asset[]): Promise<TechnicalS
 
   const signals: TechnicalSignal[] = [];
 
+  // Tüm teknik sinyal çekimi için maksimum 20 saniye — bundan uzun sürerse boş dön
+  const deadline = Date.now() + 20_000;
+
   for (let i = 0; i < candidates.length; i++) {
+    if (Date.now() >= deadline) {
+      console.warn('[TechSignals] 20s deadline aşıldı, kalan varlıklar atlandı.');
+      break;
+    }
     const asset = candidates[i];
     const yahooSymbol = yahooLookup.get(asset.symbol)!;
     if (i > 0) await sleep(API_THROTTLE_MS);

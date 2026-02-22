@@ -158,11 +158,19 @@ export default function Index() {
       const lastSnapshot = loadLastSnapshot();
       const perf = lastSnapshot ? calculatePerformance(lastSnapshot, current) : null;
 
-      // 3. Teknik sinyaller (RSI/SMA) — yalnızca Yahoo anahtarı varsa
-      const techSignals = hasYahooKey() ? await fetchTechnicalSignals(current) : [];
+      // Yardımcı: Promise'e zaman aşımı — takılı kalırsa fallback döner
+      const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+        Promise.race([p, new Promise<T>(res => setTimeout(() => res(fallback), ms))]);
 
-      // 4. Makroekonomik bağlam (Tavily) — yalnızca Tavily anahtarı varsa
-      const macroCtx = hasTavilyKey() ? await fetchMacroContext() : undefined;
+      // 3. Teknik sinyaller — max 25s; aşılırsa boş dizi ile devam et
+      const techSignals = hasYahooKey()
+        ? await withTimeout(fetchTechnicalSignals(current), 25_000, [])
+        : [];
+
+      // 4. Makroekonomik bağlam — max 15s; aşılırsa undefined ile devam et
+      const macroCtx = hasTavilyKey()
+        ? await withTimeout(fetchMacroContext(), 15_000, undefined)
+        : undefined;
 
       // 5. Analiz üret (Claude AI veya kural tabanlı)
       let result: AnalysisResult;

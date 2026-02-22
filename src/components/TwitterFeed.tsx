@@ -125,19 +125,6 @@ function TweetEmbed({ tweetId, username, onRemove, isDark }: TweetEmbedProps) {
         <X className="w-3 h-3" />
       </button>
 
-      {/* Yükleniyor iskelet */}
-      {status === 'loading' && (
-        <div className="rounded-xl border border-border bg-card/50 p-4 animate-pulse space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-secondary" />
-            <div className="h-3 w-24 bg-secondary rounded" />
-          </div>
-          <div className="h-3 w-full bg-secondary rounded" />
-          <div className="h-3 w-3/4 bg-secondary rounded" />
-          <div className="text-xs text-muted-foreground pt-1">{username} yükleniyor...</div>
-        </div>
-      )}
-
       {/* Hata durumu */}
       {status === 'error' && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">
@@ -162,13 +149,21 @@ function TweetEmbed({ tweetId, username, onRemove, isDark }: TweetEmbedProps) {
 
       {/*
         Twitter widget konteyneri:
-        - Her zaman DOM'da var (display:none kullan, hidden class değil)
-          Böylece createTweet boyutu doğru hesaplar
-        - status === 'loaded' olduğunda görünür, diğerlerinde gizli
+        CRITICAL: Her zaman display:block olmalı — createTweet iframe'i renderlarken
+        boyut hesaplar. display:none ise iframe 0px olur ve tweet gözükmez.
+
+        Loading süresince: tam genişlikte, min-height verilmiş, arka plan animasyonlu.
+        Twitter içeriği gelince doğal yüksekliğe geçer.
+        Error'da: display:none (üstte hata kutusu gösteriliyor).
       */}
       <div
         ref={containerRef}
-        style={{ display: status === 'loaded' ? 'block' : 'none' }}
+        style={{ display: status === 'error' ? 'none' : 'block' }}
+        className={
+          status === 'loading'
+            ? 'rounded-xl border border-border bg-card/30 animate-pulse min-h-[140px]'
+            : ''
+        }
       />
     </div>
   );

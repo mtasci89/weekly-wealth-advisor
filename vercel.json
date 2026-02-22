@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/proxy/tefas/:match*",
+      "destination": "https://www.tefas.gov.tr/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

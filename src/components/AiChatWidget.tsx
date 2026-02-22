@@ -125,43 +125,36 @@ export default function AiChatWidget({ assets, analysis, onOpenSettings }: AiCha
     abortRef.current = new AbortController();
 
     try {
-      let accumulated = '';
       await sendChatMessage(
         historySnapshot,
         trimmed,
         ctx,
-        (delta) => {
-          accumulated += delta;
+        (fullText) => {
+          // Non-streaming: tüm metin tek seferde gelir, isStreaming'i de kapat
           setMessages(prev =>
             prev.map(m =>
               m.id === assistantId
-                ? { ...m, content: accumulated }
+                ? { ...m, content: fullText, isStreaming: false }
                 : m
             )
           );
         },
         abortRef.current.signal
       );
-
-      // Streaming tamamlandı — isStreaming bayrağını kaldır
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId
-            ? { ...m, isStreaming: false }
-            : m
-        )
-      );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      let friendly = 'Bir hata oluştu. Lütfen tekrar deneyin.';
+      const msg = err instanceof Error ? err.message : String(err);
+      let friendly: string;
       if (msg === 'CHAT_KEY_MISSING' || msg === 'CHAT_KEY_INVALID') {
         friendly = 'Claude API anahtarı geçersiz. Ayarlar\'dan kontrol edin.';
       } else if (msg === 'CHAT_RATE_LIMIT') {
         friendly = 'Claude API limiti aşıldı. Birkaç saniye bekleyin.';
-      } else if (msg.includes('aborted') || msg.includes('abort')) {
+      } else if (msg.includes('aborted') || msg.includes('abort') || (err instanceof Error && err.name === 'AbortError')) {
         setMessages(prev => prev.filter(m => m.id !== assistantId));
         setIsSending(false);
         return;
+      } else {
+        // Gerçek hata kodunu göster — debug için
+        friendly = `Hata: ${msg || 'Bilinmeyen hata'}`;
       }
       setError(friendly);
       setMessages(prev => prev.filter(m => m.id !== assistantId));

@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown';
 import { AnalysisResult } from '@/services/analysisEngine';
 import { PerformanceResult } from '@/services/snapshotService';
 import { PortfolioDiff, RecommendationAction } from '@/services/autoScheduler';
@@ -263,20 +264,17 @@ export default function StrategyPanel({ analysis, performance, portfolioDiff }: 
       {portfolioDiff && <PortfolioDiffSummary diff={portfolioDiff} />}
 
       {/* Summary */}
-      <div className="text-sm text-secondary-foreground leading-relaxed whitespace-pre-line">
-        {analysis.isAiGenerated ? (
-          <p className="text-sm text-foreground/90 leading-relaxed">{analysis.summary}</p>
-        ) : (
-          analysis.summary.split('\n').map((line, i) => {
-            if (line.startsWith('## '))
-              return <h3 key={i} className="text-base font-bold text-foreground mb-2">{line.replace('## ', '')}</h3>;
-            if (line.startsWith('**'))
-              return <p key={i} className="text-sm text-foreground/90" dangerouslySetInnerHTML={{
-                __html: line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
-              }} />;
-            return <p key={i}>{line}</p>;
-          })
-        )}
+      <div className="text-sm text-foreground/90 leading-relaxed">
+        <ReactMarkdown
+          components={{
+            p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+            strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+            h2: ({ children }) => <h2 className="text-base font-bold text-foreground mb-2">{children}</h2>,
+            h3: ({ children }) => <h3 className="text-sm font-bold text-foreground mb-1">{children}</h3>,
+          }}
+        >
+          {analysis.summary}
+        </ReactMarkdown>
       </div>
 
       {/* Recommendations */}

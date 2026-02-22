@@ -366,15 +366,7 @@ export function generateAnalysis(
     high: 'Yüksek',
   };
 
-  const summary = `## Aylık Portföy Stratejisi (USD Bazlı)
-
-**Hedef Aylık Getiri:** %${targetReturn} USD | **Risk Profili:** ${riskLabels[riskLevel]}
-
-Bu hafta piyasa genelinde ${gainers.length > losers.length ? 'pozitif' : 'karışık'} bir seyir gözlemlenmektedir. ${gainers.length} enstrüman yükselirken, ${losers.length} enstrüman düşüş göstermiştir.
-
-En güçlü performans **${sorted[0].symbol}** (+%${sorted[0].weeklyChangePct.toFixed(2)}) tarafında görülürken, en zayıf performans **${sorted[sorted.length - 1].symbol}** (%${sorted[sorted.length - 1].weeklyChangePct.toFixed(2)}) olmuştur.
-
-Önerilen portföy ağırlıklı ortalama beklenen haftalık getirisi **%${avgReturn.toFixed(2)}** seviyesindedir.${avgReturn < targetReturn ? ` Bu, hedeflenen %${targetReturn} getirisinin altında kalmaktadır — piyasa koşulları göz önünde bulundurulmalıdır.` : ''}`;
+  const summary = `Bu hafta piyasa genelinde ${gainers.length > losers.length ? 'pozitif' : 'karışık'} bir seyir gözlemlenmektedir. ${gainers.length} enstrüman yükselirken, ${losers.length} enstrüman düşüş göstermiştir. **${sorted[0].symbol}** (+%${sorted[0].weeklyChangePct.toFixed(2)}) en güçlü, **${sorted[sorted.length - 1].symbol}** (%${sorted[sorted.length - 1].weeklyChangePct.toFixed(2)}) ise en zayıf performansı sergiledi. Önerilen **${riskLabels[riskLevel]}** risk profilli portföyün ağırlıklı haftalık getiri beklentisi **%${avgReturn.toFixed(2)}** (USD bazlı aylık hedef: %${targetReturn}).${avgReturn < targetReturn / 4.33 ? ' Mevcut piyasa koşulları hedefin altında kalabilir — risk toleransınızı gözden geçirin.' : ''}`;
 
   const riskNote = riskLevel === 'high'
     ? '⚠️ Yüksek riskli portföy. Yüksek volatilite beklenmektedir. Sadece kaybetmeyi göze alabileceğiniz tutarları yatırın.'
