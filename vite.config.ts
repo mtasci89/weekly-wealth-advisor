@@ -11,6 +11,23 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      // TEFAS CORS bypass (yalnızca geliştirme ortamı)
+      // Production'da bir reverse proxy veya serverless fonksiyon kullanın.
+      // Örnek: Vercel'de /api/tefas route'u oluşturun.
+      '/proxy/tefas': {
+        target: 'https://www.tefas.gov.tr',
+        changeOrigin: true,
+        // /proxy/tefas/BindHistoryInfo → /api/DB/BindHistoryInfo
+        rewrite: (p) => p.replace(/^\/proxy\/tefas/, '/api/DB'),
+        secure: true,
+        headers: {
+          'Referer': 'https://www.tefas.gov.tr/',
+          'Origin': 'https://www.tefas.gov.tr',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36',
+        },
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

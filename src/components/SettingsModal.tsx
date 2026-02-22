@@ -7,11 +7,29 @@ import { Settings, Key, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-rea
 import { getApiKeys, saveApiKeys, ApiKeys } from '@/services/apiKeyStore';
 import { useToast } from '@/hooks/use-toast';
 
-export default function SettingsModal() {
+interface SettingsModalProps {
+  /** Anahtarlar kaydedildikten sonra çağrılır (örn. veriyi yeniden yükle) */
+  onSave?: () => void;
+  /** Tetikleyici buton etiketi; verilmezse sadece ayarlar ikonu gösterilir */
+  triggerLabel?: string;
+  /** Dışarıdan kontrol: true ise modal açılır */
+  forceOpen?: boolean;
+  /** Dışarıdan kapama callback'i */
+  onForceClose?: () => void;
+}
+
+export default function SettingsModal({ onSave, triggerLabel, forceOpen, onForceClose }: SettingsModalProps = {}) {
   const [open, setOpen] = useState(false);
-  const [keys, setKeys] = useState<ApiKeys>({ yahooFinance: '', claude: '' });
+
+  // Dışarıdan açma talebi
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
+  const [keys, setKeys] = useState<ApiKeys>({ yahooFinance: '', claude: '', tavily: '', gemini: '' });
   const [showYahoo, setShowYahoo] = useState(false);
   const [showClaude, setShowClaude] = useState(false);
+  const [showTavily, setShowTavily] = useState(false);
+  const [showGemini, setShowGemini] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -23,10 +41,11 @@ export default function SettingsModal() {
   const handleSave = () => {
     saveApiKeys(keys);
     toast({
-      title: '✅ API Anahtarları Kaydedildi',
-      description: 'Anahtarlarınız güvenli bir şekilde tarayıcı deposuna kaydedildi.',
+      title: 'API Anahtarları Kaydedildi',
+      description: 'Anahtarlarınız tarayıcı deposuna kaydedildi.',
     });
     setOpen(false);
+    onSave?.();
   };
 
   const maskValue = (val: string) => {
@@ -35,11 +54,17 @@ export default function SettingsModal() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) onForceClose?.(); }}>
       <DialogTrigger asChild>
-        <button className="p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-          <Settings className="w-5 h-5" />
-        </button>
+        {triggerLabel ? (
+          <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+            {triggerLabel}
+          </button>
+        ) : (
+          <button className="p-2 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
+            <Settings className="w-5 h-5" />
+          </button>
+        )}
       </DialogTrigger>
       <DialogContent className="glass-card border-border bg-card sm:max-w-[480px]">
         <DialogHeader>
@@ -118,6 +143,76 @@ export default function SettingsModal() {
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showClaude ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Tavily API — web araştırması için */}
+          <div className="space-y-2">
+            <Label className="text-sm font-mono text-foreground flex items-center gap-2">
+              Tavily API Key
+              <span className="text-[10px] font-normal text-muted-foreground/70 bg-secondary/50 px-1.5 py-0.5 rounded">Opsiyonel</span>
+              {keys.tavily ? (
+                <CheckCircle className="w-3.5 h-3.5 text-primary" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              Claude analizine güncel makroekonomik bağlam ekler (faiz, enflasyon, piyasa haberleri) →{' '}
+              <a href="https://tavily.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                tavily.com
+              </a>
+            </p>
+            <div className="relative">
+              <Input
+                type={showTavily ? 'text' : 'password'}
+                placeholder="tvly-..."
+                value={keys.tavily}
+                onChange={e => setKeys(prev => ({ ...prev, tavily: e.target.value }))}
+                className="bg-secondary/50 border-border font-mono text-sm pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowTavily(!showTavily)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showTavily ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Gemini API — AI chat asistanı için */}
+          <div className="space-y-2">
+            <Label className="text-sm font-mono text-foreground flex items-center gap-2">
+              Gemini API Key
+              <span className="text-[10px] font-normal text-muted-foreground/70 bg-secondary/50 px-1.5 py-0.5 rounded">AI Chat</span>
+              {keys.gemini ? (
+                <CheckCircle className="w-3.5 h-3.5 text-primary" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              AI Finans Asistanı için Gemini 2.0 Flash kullanır. Ücretsiz quota mevcut →{' '}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                aistudio.google.com
+              </a>
+            </p>
+            <div className="relative">
+              <Input
+                type={showGemini ? 'text' : 'password'}
+                placeholder="AIza..."
+                value={keys.gemini}
+                onChange={e => setKeys(prev => ({ ...prev, gemini: e.target.value }))}
+                className="bg-secondary/50 border-border font-mono text-sm pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGemini(!showGemini)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showGemini ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>

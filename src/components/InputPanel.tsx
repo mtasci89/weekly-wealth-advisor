@@ -1,21 +1,37 @@
 import { useState } from 'react';
 import { RiskLevel } from '@/services/analysisEngine';
-import { TrendingUp, ShieldCheck, AlertTriangle, Zap } from 'lucide-react';
+import { TrendingUp, ShieldCheck, AlertTriangle, Zap, DollarSign, RefreshCw } from 'lucide-react';
 
 interface InputPanelProps {
   onAnalyze: (targetReturn: number, riskLevel: RiskLevel) => void;
   isLoading: boolean;
+  /** Pazar günü otomatik analiz yapıldıysa true */
+  autoAnalyzed?: boolean;
+  /** Son otomatik analiz zamanı (formatlı string) */
+  lastAutoAnalysis?: string | null;
 }
 
 const riskOptions: { value: RiskLevel; label: string; icon: React.ReactNode; desc: string }[] = [
-  { value: 'low', label: 'Düşük', icon: <ShieldCheck className="w-4 h-4" />, desc: 'Sermaye koruması' },
-  { value: 'medium', label: 'Orta', icon: <TrendingUp className="w-4 h-4" />, desc: 'Dengeli büyüme' },
-  { value: 'high', label: 'Yüksek', icon: <AlertTriangle className="w-4 h-4" />, desc: 'Agresif getiri' },
+  { value: 'low',    label: 'Düşük',  icon: <ShieldCheck className="w-4 h-4" />, desc: 'Sermaye koruması' },
+  { value: 'medium', label: 'Orta',   icon: <TrendingUp className="w-4 h-4" />,  desc: 'Dengeli büyüme'  },
+  { value: 'high',   label: 'Yüksek', icon: <AlertTriangle className="w-4 h-4" />, desc: 'Agresif getiri' },
 ];
 
-export default function InputPanel({ onAnalyze, isLoading }: InputPanelProps) {
-  const [targetReturn, setTargetReturn] = useState(2);
+/** Aylık bileşik getiriden yıllık eşdeğer hesapla */
+function monthlyToAnnual(monthly: number): string {
+  return (((1 + monthly / 100) ** 12 - 1) * 100).toFixed(1);
+}
+
+export default function InputPanel({
+  onAnalyze,
+  isLoading,
+  autoAnalyzed,
+  lastAutoAnalysis,
+}: InputPanelProps) {
+  const [targetReturn, setTargetReturn] = useState(3); // aylık % (USD bazlı)
   const [riskLevel, setRiskLevel] = useState<RiskLevel>('medium');
+
+  const annualEquiv = monthlyToAnnual(targetReturn);
 
   return (
     <div className="glass-card p-6 space-y-6">
@@ -24,15 +40,33 @@ export default function InputPanel({ onAnalyze, isLoading }: InputPanelProps) {
         Analiz Parametreleri
       </div>
 
+      {/* Otomatik güncelleme bildirimi */}
+      {autoAnalyzed && lastAutoAnalysis && (
+        <div className="flex items-start gap-2 rounded-lg bg-primary/10 border border-primary/25 px-3 py-2.5">
+          <RefreshCw className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+          <div className="text-xs">
+            <p className="font-semibold text-primary">Otomatik Haftalık Güncelleme ✓</p>
+            <p className="text-muted-foreground mt-0.5">{lastAutoAnalysis} — portföy yenilendi.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Aylık hedef getiri — USD bazlı */}
       <div className="space-y-2">
-        <label className="text-sm text-muted-foreground">
-          Haftalık Hedef Getiri
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-sm text-muted-foreground flex items-center gap-1.5">
+            <DollarSign className="w-3.5 h-3.5" />
+            Aylık Hedef Getiri
+            <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded font-mono">USD</span>
+          </label>
+          <span className="text-[10px] text-muted-foreground font-mono">≈ yıllık %{annualEquiv}</span>
+        </div>
+
         <div className="flex items-center gap-3">
           <input
             type="range"
-            min={0.5}
-            max={10}
+            min={1}
+            max={20}
             step={0.5}
             value={targetReturn}
             onChange={e => setTargetReturn(parseFloat(e.target.value))}
@@ -44,12 +78,15 @@ export default function InputPanel({ onAnalyze, isLoading }: InputPanelProps) {
             %{targetReturn}
           </span>
         </div>
+
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          BIST hisseleri USD/TRY kuruyla dolar değerine çevrilerek tüm varlıklar aynı para biriminde karşılaştırılır.
+        </p>
       </div>
 
+      {/* Risk toleransı */}
       <div className="space-y-2">
-        <label className="text-sm text-muted-foreground">
-          Risk Toleransı
-        </label>
+        <label className="text-sm text-muted-foreground">Risk Toleransı</label>
         <div className="grid grid-cols-3 gap-2">
           {riskOptions.map(opt => (
             <button
@@ -69,6 +106,7 @@ export default function InputPanel({ onAnalyze, isLoading }: InputPanelProps) {
         </div>
       </div>
 
+      {/* Analiz butonu */}
       <button
         onClick={() => onAnalyze(targetReturn, riskLevel)}
         disabled={isLoading}
@@ -88,6 +126,10 @@ export default function InputPanel({ onAnalyze, isLoading }: InputPanelProps) {
           </>
         )}
       </button>
+
+      <p className="text-[10px] text-muted-foreground/60 text-center">
+        Her Pazar sabahı portföy otomatik olarak güncellenir.
+      </p>
     </div>
   );
 }

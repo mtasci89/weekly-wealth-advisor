@@ -3,11 +3,15 @@ const STORAGE_KEY = 'portfolyoai_api_keys';
 export interface ApiKeys {
   yahooFinance: string;
   claude: string;
+  tavily: string;
+  gemini: string;
 }
 
 const DEFAULT_KEYS: ApiKeys = {
   yahooFinance: '',
   claude: '',
+  tavily: '',
+  gemini: '',
 };
 
 export function getApiKeys(): ApiKeys {
@@ -30,4 +34,12 @@ export function hasYahooKey(): boolean {
 
 export function hasClaudeKey(): boolean {
   return getApiKeys().claude.trim().length > 0;
+}
+
+export function hasTavilyKey(): boolean {
+  return getApiKeys().tavily.trim().length > 0;
+}
+
+export function hasGeminiKey(): boolean {
+  return getApiKeys().gemini.trim().length > 0;
 }

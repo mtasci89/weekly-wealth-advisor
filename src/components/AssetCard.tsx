@@ -1,14 +1,46 @@
 import { Asset } from '@/services/marketData';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 
-interface AssetCardProps {
-  asset: Asset;
+export type TimePeriod = '1d' | '1w' | '1m' | '3m';
+
+export const PERIOD_LABELS: Record<TimePeriod, string> = {
+  '1d': 'Günlük',
+  '1w': 'Haftalık',
+  '1m': 'Aylık',
+  '3m': '3 Aylık',
+};
+
+/** Seçili periyoda göre ilgili değişim yüzdesini döndürür */
+export function getChangePct(asset: Asset, period: TimePeriod): number {
+  switch (period) {
+    case '1d':
+      // Günlük veri yoksa haftalık/5'e bölerek tahmin et
+      return asset.historicalReturns.oneMonth / 22; // ~22 işlem günü
+    case '1w':
+      return asset.weeklyChangePct;
+    case '1m':
+      return asset.historicalReturns.oneMonth;
+    case '3m':
+      return asset.historicalReturns.threeMonth;
+  }
 }
 
-export default function AssetCard({ asset }: AssetCardProps) {
-  const isUp = asset.weeklyChange >= 0;
+interface AssetCardProps {
+  asset: Asset;
+  period: TimePeriod;
+}
+
+export default function AssetCard({ asset, period }: AssetCardProps) {
+  const changePct = getChangePct(asset, period);
+  const isUp = changePct >= 0;
   const chartData = asset.sparkline.map((value, i) => ({ i, value }));
   const color = isUp ? 'hsl(142, 60%, 50%)' : 'hsl(0, 62%, 55%)';
+
+  // Fiyat gösterimi: BIST hisseleri TL, diğerleri USD
+  const isBist = asset.category === 'bist';
+  const priceDisplay = isBist
+    ? `₺${asset.price.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`
+    : `$${asset.price.toFixed(2)}`;
 
   return (
     <div className="glass-card p-4 flex flex-col gap-3 hover:border-muted-foreground/30 transition-colors duration-200">
@@ -18,7 +50,7 @@ export default function AssetCard({ asset }: AssetCardProps) {
           <div className="text-xs text-muted-foreground truncate max-w-[120px]">{asset.name}</div>
         </div>
         <div className={`text-xs font-mono px-2 py-0.5 rounded ${isUp ? 'bg-chart-up/15 ticker-up' : 'bg-chart-down/15 ticker-down'}`}>
-          {isUp ? '+' : ''}{asset.weeklyChangePct.toFixed(2)}%
+          {isUp ? '+' : ''}{changePct.toFixed(2)}%
         </div>
       </div>
 
@@ -45,8 +77,14 @@ export default function AssetCard({ asset }: AssetCardProps) {
       </div>
 
       <div className="flex items-end justify-between">
-        <span className="font-mono text-lg font-bold text-foreground">${asset.price.toFixed(2)}</span>
-        <span className="text-[10px] text-muted-foreground">Vol: {asset.volume}</span>
+        <span className="font-mono text-lg font-bold text-foreground">{priceDisplay}</span>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="text-[10px] text-muted-foreground">Vol: {asset.volume}</span>
+          {/* Periyot etiketi — hangi sürenin değişimi gösterildiğini netleştirir */}
+          <span className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wide">
+            {PERIOD_LABELS[period]} değ.
+          </span>
+        </div>
       </div>
     </div>
   );
