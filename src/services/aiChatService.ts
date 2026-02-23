@@ -56,9 +56,9 @@ Kurallar: Türkçe yanıt ver. Kısa ve aksiyon odaklı ol. Kesin "al/sat" yerin
 
 const CLAUDE_MODEL = 'claude-3-5-haiku-20241022';
 
-// Doğrudan Anthropic API — `anthropic-dangerous-direct-browser-calls` header'ı
-// sayesinde tarayıcıdan CORS izni veriliyor. Proxy gerekmez.
-const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+// Production'da Vercel serverless proxy, dev'de Vite proxy kullanılır.
+// Direkt Anthropic çağrısı CORS sorunlarına neden oluyordu.
+const CLAUDE_URL = '/api/claude';
 
 export { hasClaudeKey as hasChatKey };
 
@@ -97,8 +97,6 @@ export async function sendChatMessage(
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-calls': 'true',
     },
     body: JSON.stringify(body),
     signal,

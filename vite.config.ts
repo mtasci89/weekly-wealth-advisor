@@ -24,6 +24,18 @@ export default defineConfig(({ mode }) => ({
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36',
         },
       },
+      // Claude API proxy (yalnızca geliştirme ortamı)
+      // x-api-key header'ı frontend'den otomatik geçer,
+      // anthropic-version header'ı ise burada eklenir.
+      '/api/claude': {
+        target: 'https://api.anthropic.com',
+        changeOrigin: true,
+        rewrite: () => '/v1/messages',
+        secure: true,
+        headers: {
+          'anthropic-version': '2023-06-01',
+        },
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

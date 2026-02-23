@@ -150,9 +150,8 @@ export async function generateClaudeAnalysis(
 
   const prompt = buildClaudePrompt(assets, targetReturn, riskLevel, technicalSignals, macroContext);
 
-  // Doğrudan Anthropic API — `anthropic-dangerous-direct-browser-calls` header'ı
-  // sayesinde tarayıcıdan CORS izni veriliyor. Proxy gerekmez.
-  const ANALYSIS_URL = 'https://api.anthropic.com/v1/messages';
+  // Vercel serverless proxy (production) veya Vite proxy (dev) üzerinden
+  const ANALYSIS_URL = '/api/claude';
 
   try {
     const response = await fetch(ANALYSIS_URL, {
@@ -160,8 +159,6 @@ export async function generateClaudeAnalysis(
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': getApiKeys().claude,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-calls': 'true',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
