@@ -2,17 +2,30 @@
  * autoScheduler.ts
  * ─────────────────────────────────────────────────────────────
  * Her Pazar sabahı 09:00+ portföy analizini otomatik tetikler.
- * Sayfa açık olduğu sürece her 30 dakikada koşulları kontrol eder;
- * aynı gün zaten tetiklendiyse bir daha ASLA çalışmaz.
+ * Sayfa açık olduğu sürece her 30 dakikada koşulları kontrol eder.
+ *
+ * KOTA KORUMA KATMANLARI (en az bir tanesi geçerliyse tetiklenmez):
+ *   1. Bugün Pazar değilse → pass
+ *   2. Saat 09:00'dan önceyse → pass
+ *   3. Bu hafta (ISO hafta numarası) zaten çalıştıysa → pass  ← ANA GUARD
+ *   4. Bu gün (YYYY-MM-DD) zaten çalıştıysa → pass             ← İKİNCİL GUARD
+ *   5. _running bayrağı → eş zamanlı çift tetiklenme engeli
+ *
+ * ⚠️  DEVRE DIŞI — Index.tsx'te startAutoScheduler çağrısı comment'lendi.
+ *     Yeniden aktifleştirme talimatı Index.tsx'teki comment'te.
  */
 
 import { PortfolioSnapshot } from './snapshotService';
 
 // ── localStorage keys ────────────────────────────────────────
-/** YYYY-MM-DD formatında son otomatik analiz tarihi */
-const KEY_LAST_AUTO  = 'portfolyoai_last_auto_sunday';
+/** YYYY-MM-DD formatında son otomatik analiz günü */
+const KEY_LAST_AUTO       = 'portfolyoai_last_auto_sunday';
+/** "YYYY-Www" formatında son otomatik analiz ISO haftası */
+const KEY_LAST_AUTO_WEEK  = 'portfolyoai_last_auto_week';
+/** ISO timestamp — tam tarih/saat damgası (bilgi amaçlı) */
+const KEY_LAST_AUTO_TS    = 'portfolyoai_last_auto_timestamp';
 /** Önceki öneri sembolleri (diff hesabı için) */
-const KEY_PREV_RECS  = 'portfolyoai_prev_recommendations';
+const KEY_PREV_RECS       = 'portfolyoai_prev_recommendations';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -132,11 +145,28 @@ function todayStr(): string {
 }
 
 /**
+ * ISO 8601 hafta numarasını "YYYY-Www" formatında döndürür.
+ * Örnek: 2026-W08  (2026'nın 8. haftası)
+ *
+ * Algoritma: Perşembe bazlı ISO hafta — JS'in getDay() Pazar=0 olduğuna dikkat.
+ */
+function isoWeekStr(d = new Date()): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Perşembe: ISO haftasının ortası. İlgili haftanın Perşembesine snap et.
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo    = Math.ceil(((date.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+/**
  * Otomatik analizin tetiklenip tetiklenmeyeceğini belirler.
- * Koşullar:
+ * 5 katmanlı kota koruması:
  *   1. Bugün Pazar (getDay() === 0)
  *   2. Yerel saat 09:00 veya sonrası
- *   3. localStorage'da bu güne ait kayıt YOK (haftada 1 kez garantisi)
+ *   3. Bu ISO haftasında zaten çalıştı mı?  ← ANA haftalık guard
+ *   4. Bu gün (YYYY-MM-DD) zaten çalıştı mı?  ← ikincil günlük guard
+ *   (5. _running bayrağı — startAutoScheduler içinde yönetilir)
  */
 function shouldTrigger(): boolean {
   const now = new Date();
@@ -147,29 +177,43 @@ function shouldTrigger(): boolean {
   // 2) Saat 09:00 veya sonrası mı?
   if (now.getHours() < 9) return false;
 
-  // 3) Bugün zaten çalıştı mı? (en kritik guard)
-  const lastRun = localStorage.getItem(KEY_LAST_AUTO);
-  if (lastRun === todayStr()) return false;
+  // 3) Bu ISO haftasında zaten çalıştı mı? (en güçlü guard)
+  const lastWeek = localStorage.getItem(KEY_LAST_AUTO_WEEK);
+  if (lastWeek === isoWeekStr(now)) return false;
+
+  // 4) Bu gün (YYYY-MM-DD) zaten çalıştı mı? (ikincil guard)
+  const lastDay = localStorage.getItem(KEY_LAST_AUTO);
+  if (lastDay === todayStr()) return false;
 
   return true;
 }
 
 /**
- * Analiz başarıyla tamamlandığında çağrılır.
- * localStorage'a bugünün tarihini yazar → aynı gün tekrar tetiklenmez.
+ * Analiz tetiklenmeden ÖNCE çağrılır (hata olsa bile tekrar tetiklenmez).
+ * Hem günlük hem haftalık hem tam timestamp kaydeder.
  */
 export function markAutoAnalyzedToday(): void {
-  localStorage.setItem(KEY_LAST_AUTO, todayStr());
+  const now = new Date();
+  localStorage.setItem(KEY_LAST_AUTO,      todayStr());
+  localStorage.setItem(KEY_LAST_AUTO_WEEK, isoWeekStr(now));
+  localStorage.setItem(KEY_LAST_AUTO_TS,   now.toISOString());
 }
 
 /** Bu hafta için otomatik analiz zaten yapıldı mı? */
 export function wasAutoAnalyzedToday(): boolean {
-  return localStorage.getItem(KEY_LAST_AUTO) === todayStr();
+  // Hem günlük hem haftalık kontrol et
+  return (
+    localStorage.getItem(KEY_LAST_AUTO)      === todayStr() ||
+    localStorage.getItem(KEY_LAST_AUTO_WEEK) === isoWeekStr()
+  );
 }
 
 /** Son otomatik analiz tarihini okunabilir string olarak döndürür */
 export function getLastAutoAnalysisLabel(): string | null {
-  const raw = localStorage.getItem(KEY_LAST_AUTO);
+  // Önce tam timestamp, yoksa gün bazlı tarihe bak
+  const ts  = localStorage.getItem(KEY_LAST_AUTO_TS);
+  const day = localStorage.getItem(KEY_LAST_AUTO);
+  const raw = ts || day;
   if (!raw) return null;
   try {
     const d = new Date(raw);

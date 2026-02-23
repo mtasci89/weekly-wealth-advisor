@@ -13,12 +13,9 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       // TEFAS CORS bypass (yalnızca geliştirme ortamı)
-      // Production'da bir reverse proxy veya serverless fonksiyon kullanın.
-      // Örnek: Vercel'de /api/tefas route'u oluşturun.
       '/proxy/tefas': {
         target: 'https://www.tefas.gov.tr',
         changeOrigin: true,
-        // /proxy/tefas/BindHistoryInfo → /api/DB/BindHistoryInfo
         rewrite: (p) => p.replace(/^\/proxy\/tefas/, '/api/DB'),
         secure: true,
         headers: {

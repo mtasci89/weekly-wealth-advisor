@@ -55,7 +55,10 @@ Kurallar: Türkçe yanıt ver. Kısa ve aksiyon odaklı ol. Kesin "al/sat" yerin
 // analysisEngine.ts ile aynı non-streaming yaklaşım kullanılıyor.
 
 const CLAUDE_MODEL = 'claude-3-5-haiku-20241022';
-const CLAUDE_URL   = 'https://api.anthropic.com/v1/messages';
+
+// Doğrudan Anthropic API — `anthropic-dangerous-direct-browser-calls` header'ı
+// sayesinde tarayıcıdan CORS izni veriliyor. Proxy gerekmez.
+const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 
 export { hasClaudeKey as hasChatKey };
 

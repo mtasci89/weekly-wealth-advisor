@@ -18,7 +18,7 @@ import {
   PerformanceResult,
 } from '@/services/snapshotService';
 import {
-  startAutoScheduler,
+  // startAutoScheduler,  // ← OTOMATİK ANALİZ DEVRE DIŞI (Yahoo Finance kota koruması)
   computePortfolioDiff,
   updatePrevRecommendations,
   markAutoAnalyzedToday,
@@ -35,11 +35,35 @@ import AiChatWidget from '@/components/AiChatWidget';
 import { Activity, Wifi, KeyRound, RefreshCw, Sun, Moon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+// ── localStorage persist/restore yardımcıları ────────────────
+const LS_ANALYSIS  = 'portfolyoai_last_analysis';
+const LS_PORTFOLIO_DIFF = 'portfolyoai_last_diff';
+
+function saveAnalysis(a: AnalysisResult): void {
+  try { localStorage.setItem(LS_ANALYSIS, JSON.stringify(a)); } catch { /* quota */ }
+}
+function loadSavedAnalysis(): AnalysisResult | null {
+  try {
+    const raw = localStorage.getItem(LS_ANALYSIS);
+    return raw ? (JSON.parse(raw) as AnalysisResult) : null;
+  } catch { return null; }
+}
+function saveDiff(d: PortfolioDiff): void {
+  try { localStorage.setItem(LS_PORTFOLIO_DIFF, JSON.stringify(d)); } catch { /* quota */ }
+}
+function loadSavedDiff(): PortfolioDiff | null {
+  try {
+    const raw = localStorage.getItem(LS_PORTFOLIO_DIFF);
+    return raw ? (JSON.parse(raw) as PortfolioDiff) : null;
+  } catch { return null; }
+}
+
 export default function Index() {
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  // Önceki analiz sonucu mount'ta localStorage'dan geri yüklenir
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => loadSavedAnalysis());
   const [performance, setPerformance] = useState<PerformanceResult | null>(null);
-  const [portfolioDiff, setPortfolioDiff] = useState<PortfolioDiff | null>(null);
+  const [portfolioDiff, setPortfolioDiff] = useState<PortfolioDiff | null>(() => loadSavedDiff());
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasKey, setHasKey] = useState(hasYahooKey());
@@ -140,62 +164,75 @@ export default function Index() {
   }, [toast, assets]);
 
   useEffect(() => {
-    loadData();
+    loadData().then(loaded => {
+      // Sayfa yenilendiğinde önceki analiz varsa P&L'i yeniden hesapla
+      if (loaded.length > 0) {
+        const lastSnapshot = loadLastSnapshot();
+        if (lastSnapshot) {
+          setPerformance(calculatePerformance(lastSnapshot, loaded));
+        }
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAnalyze = useCallback(async (targetReturn: number, riskLevel: RiskLevel, isAutoTriggered = false) => {
-    // Persist params so the auto-scheduler can reuse the last settings
     savedParamsRef.current = { targetReturn, riskLevel };
-
     setIsAnalyzing(true);
 
-    try {
-      // 1. Önbellekten veya API'den güncel fiyatlar
-      const current = await loadData();
+    // ── Yardımcılar ─────────────────────────────────
+    const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+      Promise.race([p, new Promise<T>(res => setTimeout(() => res(fallback), ms))]);
 
-      // 2. Son snapshot ile P&L hesapla
+    // ── 30 saniyelik mutlak deadline ─────────────────
+    // Her şeyi (veri + teknik + makro + AI) 30s'de kesmemiz LAZIM.
+    const DEADLINE_MS = 30_000;
+    const deadline = Date.now() + DEADLINE_MS;
+    const remaining = () => Math.max(0, deadline - Date.now());
+
+    try {
+      // 1. Piyasa verileri — max 10s
+      const current = await withTimeout(loadData(), Math.min(remaining(), 10_000), assets);
+      if (current.length === 0) throw new Error('NO_DATA');
+
+      // 2. Geçmiş performans
       const lastSnapshot = loadLastSnapshot();
       const perf = lastSnapshot ? calculatePerformance(lastSnapshot, current) : null;
 
-      // Yardımcı: Promise'e zaman aşımı — takılı kalırsa fallback döner
-      const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
-        Promise.race([p, new Promise<T>(res => setTimeout(() => res(fallback), ms))]);
-
-      // 3. Teknik sinyaller — max 25s; aşılırsa boş dizi ile devam et
-      const techSignals = hasYahooKey()
-        ? await withTimeout(fetchTechnicalSignals(current), 25_000, [])
+      // 3. Teknik sinyaller — kalan sürenin yarısı, max 10s
+      const techSignals = hasYahooKey() && remaining() > 2000
+        ? await withTimeout(fetchTechnicalSignals(current), Math.min(remaining() * 0.5, 10_000), [])
         : [];
 
-      // 4. Makroekonomik bağlam — max 15s; aşılırsa undefined ile devam et
-      const macroCtx = hasTavilyKey()
-        ? await withTimeout(fetchMacroContext(), 15_000, undefined)
+      // 4. Makro bağlam — kalan sürenin yarısı, max 8s
+      const macroCtx = hasTavilyKey() && remaining() > 2000
+        ? await withTimeout(fetchMacroContext(), Math.min(remaining() * 0.5, 8_000), undefined)
         : undefined;
 
-      // 5. Analiz üret (Claude AI veya kural tabanlı)
+      // 5. AI analiz — kalan süre, max 15s
       let result: AnalysisResult;
-      if (hasClaudeKey()) {
-        result = await generateClaudeAnalysis(current, targetReturn, riskLevel, techSignals, macroCtx);
+      if (hasClaudeKey() && remaining() > 2000) {
+        result = await withTimeout(
+          generateClaudeAnalysis(current, targetReturn, riskLevel, techSignals, macroCtx),
+          Math.min(remaining(), 15_000),
+          generateAnalysis(current, targetReturn, riskLevel) // timeout olursa kural tabanlı fallback
+        );
       } else {
-        await new Promise(r => setTimeout(r, 800));
         result = generateAnalysis(current, targetReturn, riskLevel);
       }
 
-      // 6. Snapshot kaydet
+      // 6-8. Kaydet + diff
       const snapshot = buildSnapshotFromAnalysis(result, current, targetReturn, riskLevel, 'live');
       saveSnapshot(snapshot);
-
-      // 7. Portfolio diff hesapla (yeni vs önceki öneri)
       const diff = computePortfolioDiff(snapshot);
-
-      // 8. Önceki öneriyi güncelle (bir sonraki diff için)
       updatePrevRecommendations(snapshot);
 
       setAnalysis(result);
+      saveAnalysis(result);
       setPerformance(perf);
       setPortfolioDiff(diff);
+      if (diff) saveDiff(diff);
 
-      // 9. Pazar günü otomatik tetiklendiyse bildirim göster
       if (isAutoTriggered) {
         markAutoAnalyzedToday();
         const label = getLastAutoAnalysisLabel();
@@ -209,49 +246,42 @@ export default function Index() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg === 'CLAUDE_KEY_INVALID') {
-        toast({
-          variant: 'destructive',
-          title: 'Geçersiz Claude API Anahtarı',
-          description: "Ayarlar'dan kontrol edin. Kural tabanlı analiz gösteriliyor.",
-        });
+        toast({ variant: 'destructive', title: 'Geçersiz Claude API Anahtarı', description: "Ayarlar'dan kontrol edin." });
       } else if (msg === 'CLAUDE_RATE_LIMIT') {
-        toast({
-          variant: 'destructive',
-          title: 'Claude API Limiti Aşıldı',
-          description: 'Kural tabanlı analiz gösteriliyor.',
-        });
+        toast({ variant: 'destructive', title: 'Claude API Limiti Aşıldı', description: 'Kural tabanlı analiz gösteriliyor.' });
       }
-      const fallback = generateAnalysis(
-        freshAssets.length > 0 ? freshAssets : assets,
-        targetReturn,
-        riskLevel,
-      );
-      setAnalysis(fallback);
+      const src = freshAssets.length > 0 ? freshAssets : assets;
+      if (src.length > 0) {
+        const fallback = generateAnalysis(src, targetReturn, riskLevel);
+        setAnalysis(fallback);
+        saveAnalysis(fallback);
+      }
     } finally {
       setIsAnalyzing(false);
     }
   }, [loadData, freshAssets, assets, toast]);
 
   // ── Pazar günü otomatik analiz zamanlayıcısı ─────────────
-  useEffect(() => {
-    const cleanup = startAutoScheduler({
-      onTrigger: async () => {
-        // savedParamsRef henüz kullanıcı tarafından doldurulmamış olabilir;
-        // bu durumda ref'in mevcut değerleri zaten default'lara (3, 'medium') ayarlı.
-        const { targetReturn, riskLevel } = savedParamsRef.current;
-        // Güvenlik: değerlerin geçerli olduğunu teyit et, değilse default kullan
-        const safeReturn = (typeof targetReturn === 'number' && targetReturn >= 1 && targetReturn <= 20)
-          ? targetReturn
-          : 3;
-        const safeRisk: RiskLevel = (['low', 'medium', 'high'] as RiskLevel[]).includes(riskLevel)
-          ? riskLevel
-          : 'medium';
-        await handleAnalyze(safeReturn, safeRisk, true);
-      },
-    });
-    return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // ⚠️  DEVRE DIŞI — Yahoo Finance PRO kotası tükendi (2025-02-23).
+  //     Yeniden aktifleştirmek için:
+  //       1. startAutoScheduler import'unu açın (yukarıda comment'li)
+  //       2. Aşağıdaki useEffect bloğunu açın
+  //       3. autoScheduler.ts → shouldTrigger() haftalık guard ile korunuyor
+  //
+  // useEffect(() => {
+  //   const cleanup = startAutoScheduler({
+  //     onTrigger: async () => {
+  //       const { targetReturn, riskLevel } = savedParamsRef.current;
+  //       const safeReturn = (typeof targetReturn === 'number' && targetReturn >= 1 && targetReturn <= 20)
+  //         ? targetReturn : 3;
+  //       const safeRisk: RiskLevel = (['low', 'medium', 'high'] as RiskLevel[]).includes(riskLevel)
+  //         ? riskLevel : 'medium';
+  //       await handleAnalyze(safeReturn, safeRisk, true);
+  //     },
+  //   });
+  //   return cleanup;
+  // // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, []);
 
   return (
     <div className="min-h-screen bg-background">
